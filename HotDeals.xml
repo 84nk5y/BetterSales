@@ -1,0 +1,76 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <Script file="HotDeals.lua"/>
+
+    <Frame name="HotDealsFrame" parent="UIParent" mixin="HotDealsMixin" inherits="BasicFrameTemplateWithInset" enableMouse="true" movable="true" hidden="false">
+        <Size x="320" y="183"/>
+        <Anchors>
+            <Anchor point="TOP"/>
+        </Anchors>
+
+        <Layers>
+            <Layer level="ARTWORK">
+                <FontString name="$parentTitleText" inherits="GameFontHighlightLarge" text="Hot Deals">
+                    <Anchors>
+                        <Anchor point="TOP" x="0" y="-3"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+
+        <Frames>
+            <ScrollFrame parentKey="ScrollFrame" inherits="UIPanelScrollFrameTemplate">
+                <Anchors>
+                    <Anchor point="TOPLEFT" x="0" y="-30"/>
+                    <Anchor point="BOTTOMRIGHT" x="-30" y="10"/>
+                </Anchors>
+                <ScrollChild>
+                    <Frame parentKey="Content" inherits="VerticalLayoutFrame">
+                        <Size x="280" y="1"/>
+                        <KeyValues>
+                            <KeyValue key="spacing" value="2" type="number"/>
+                        </KeyValues>
+                    </Frame>
+                </ScrollChild>
+            </ScrollFrame>
+        </Frames>
+
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+            <OnEvent method="OnEvent"/>
+            <OnShow method="UpdateList"/>
+        </Scripts>
+    </Frame>
+
+    <Button name="HotDealsEntryTemplate" virtual="true">
+        <Size x="280" y="22"/>
+        <Layers>
+            <Layer level="ARTWORK">
+                <Texture parentKey="Icon">
+                    <Size x="18" y="18"/>
+                    <Anchors>
+                        <Anchor point="LEFT" x="5" y="0"/>
+                    </Anchors>
+                </Texture>
+                <Texture parentKey="IconBorder" file="Interface\Common\WhiteIconFrame" hidden="true">
+                    <Size x="20" y="20"/>
+                    <Anchors>
+                        <Anchor point="CENTER" relativeKey="$parent.Icon"/>
+                    </Anchors>
+                </Texture>
+                <FontString parentKey="Name" inherits="GameFontNormal" justifyH="LEFT" maxLines="1">
+                    <Size x="180" y="20"/>
+                    <Anchors>
+                        <Anchor point="LEFT" relativeKey="$parent.Icon" relativePoint="RIGHT" x="8" y="0"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="Ratio" inherits="GameFontHighlight" justifyH="RIGHT">
+                    <Size x="65" y="20"/>
+                    <Anchors>
+                        <Anchor point="RIGHT" x="10" y="0"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+    </Button>
+
+</Ui>
