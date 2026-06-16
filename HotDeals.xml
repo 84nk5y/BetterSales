@@ -48,7 +48,7 @@
                 <Texture parentKey="Icon">
                     <Size x="18" y="18"/>
                     <Anchors>
-                        <Anchor point="LEFT" x="5" y="0"/>
+                        <Anchor point="LEFT" x="12" y="0"/>
                     </Anchors>
                 </Texture>
                 <Texture parentKey="IconBorder" file="Interface\Common\WhiteIconFrame" hidden="true">

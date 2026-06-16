@@ -10,7 +10,6 @@ function HotDealsMixin:OnLoad()
 
     self:RegisterEvent("ADDON_LOADED")
     self:RegisterEvent("BAG_UPDATE_DELAYED")
-    self:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 end
 
 function HotDealsMixin:TriggerUpdate()
@@ -55,8 +54,64 @@ function HotDealsMixin:GetAuctionatorInternalAverage(itemID, itemLink)
 end
 
 function HotDealsMixin:UpdateList()
-    self:CollectItemsFromBags()
+    local container = ContinuableContainer:Create()
+    local rawItems = {}
 
+    for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) do
+            local info = C_Container.GetContainerItemInfo(bag, slot)
+            if info and info.itemID and info.hyperlink and not info.isBound then
+                table.insert(rawItems, info)
+                container:AddContinuable(Item:CreateFromItemID(info.itemID))
+            end
+        end
+    end
+
+    container:ContinueOnLoad(function()
+        self:ProcessBagData(rawItems)
+        self:RenderListElements()
+    end)
+end
+
+function HotDealsMixin:ProcessBagData(rawItems)
+    self.bagData = {}
+
+    for _, info in ipairs(rawItems) do
+        local id = info.itemID
+        local link = info.hyperlink
+
+        if not self.bagData[id] then
+            local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
+            local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
+            local currentPrice = self:GetAuctionatorCurrentPrice(link)
+            local averagePrice = self:GetAuctionatorInternalAverage(id, link)
+            local ratio = 0
+
+            if averagePrice > 0 then
+                ratio = ((currentPrice - averagePrice) / averagePrice) * 100
+            end
+
+            self.bagData[id] = {
+                ID = id,
+                name = info.itemName,
+                locations = {},
+                isCraftingReagent = isCraftingReagent,
+                count = 0,
+                quality = info.quality,
+                craftingQualityInfo = craftingQualityInfo,
+                texture = itemTexture,
+                currentPrice = currentPrice,
+                averagePrice = averagePrice,
+                ratio = ratio
+            }
+        end
+
+        table.insert(self.bagData[id].locations, { bag = info.bag, slot = info.slot })
+        self.bagData[id].count = self.bagData[id].count + info.stackCount
+    end
+end
+
+function HotDealsMixin:RenderListElements()
     local container = self.ScrollFrame.Content
 
     if not self.pool then
@@ -71,13 +126,8 @@ function HotDealsMixin:UpdateList()
         end
     end
 
-    if not next(displayList) then
-        self:Hide()
-        return
-    end
-
     table.sort(displayList, function(a, b)
-        if a.ratio ~= b.ratio then return a.ratio > b.ratio end
+        if a.ratio ~= b.ratio then return a.ratio > b.ratio end`
         if a.name ~= b.name then return a.name < b.name end
         return (a.quality or 0) > (b.quality or 0)
     end)
@@ -100,19 +150,18 @@ function HotDealsMixin:UpdateList()
 
         if data.craftingQualityInfo then
             if not entry.QualityOverlay then
-                entry.QualityOverlay = entry:CreateTexture(nil, "OVERLAY");
-                entry.QualityOverlay:SetPoint("TOPLEFT", -2, 2);
-                entry.QualityOverlay:SetDrawLayer("OVERLAY", 7);
+                entry.QualityOverlay = entry:CreateTexture(nil, "OVERLAY")
+                entry.QualityOverlay:SetPoint("TOPLEFT", 6, 2)
+                entry.QualityOverlay:SetDrawLayer("OVERLAY", 7)
             end
 
-            entry.QualityOverlay:SetAtlas(data.craftingQualityInfo.iconInventory, TextureKitConstants.UseAtlasSize);
+            entry.QualityOverlay:SetAtlas(data.craftingQualityInfo.iconInventory, TextureKitConstants.UseAtlasSize)
             entry.QualityOverlay:Show()
         elseif entry.QualityOverlay then
             entry.QualityOverlay:Hide()
         end
 
         entry.Name:SetText(data.name)
-
         entry.Ratio:SetText(string.format("+%.0f%%", data.ratio))
 
         if data.ratio < 25 then
@@ -132,7 +181,6 @@ function HotDealsMixin:UpdateList()
         end)
 
         entry:SetScript("OnLeave", GameTooltip_Hide)
-
         entry:Show()
     end
 
@@ -140,49 +188,4 @@ function HotDealsMixin:UpdateList()
     container:Show()
 
     self.ScrollFrame:UpdateScrollChildRect()
-end
-
-function HotDealsMixin:CollectItemsFromBags()
-    self.bagData = {}
-
-    for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
-        for slot = 1, C_Container.GetContainerNumSlots(bag) do
-            local info = C_Container.GetContainerItemInfo(bag, slot)
-            if info and info.itemID and info.hyperlink and not info.isBound then
-                local id = info.itemID
-                local link = info.hyperlink
-
-                if not self.bagData[id] then
-                    local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
-                    local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
-                    local currentPrice = self:GetAuctionatorCurrentPrice(link)
-                    local averagePrice = self:GetAuctionatorInternalAverage(id, link)
-                    local ratio = 0
-
-                    if averagePrice > 0 then
-                        ratio = ((currentPrice - averagePrice) / averagePrice) * 100
-                    end
-
-                    self.bagData[id] = {
-                        ID = id,
-                        name = info.itemName,
-                        locations = {},
-                        isCraftingReagent = isCraftingReagent,
-                        count = 0,
-                        quality = info.quality,
-                        craftingQualityInfo = craftingQualityInfo,
-                        texture = itemTexture,
-                        currentPrice = currentPrice,
-                        averagePrice = averagePrice,
-                        ratio = ratio
-                    }
-                end
-
-                if self.bagData[id] then
-                    table.insert(self.bagData[id].locations, { bag = bag, slot = slot })
-                    self.bagData[id].count = self.bagData[id].count + info.stackCount
-                end
-            end
-        end
-    end
 end
