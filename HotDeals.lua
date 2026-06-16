@@ -1,8 +1,12 @@
+local addonName, _ = ...
+
 HotDealsMixin = {}
 
 function HotDealsMixin:OnLoad()
     self.bagData = {}
     self.updatePending = false
+    self.rendering = false
+    self.manualClose = false
 
     self:RegisterForDrag("LeftButton")
     self:SetScript("OnDragStart", self.StartMoving)
@@ -10,6 +14,12 @@ function HotDealsMixin:OnLoad()
 
     self:RegisterEvent("ADDON_LOADED")
     self:RegisterEvent("BAG_UPDATE_DELAYED")
+
+    if self.CloseButton then
+        self.CloseButton:HookScript("OnClick", function()
+            self:OnClose()
+        end)
+    end
 end
 
 function HotDealsMixin:TriggerUpdate()
@@ -24,24 +34,28 @@ end
 
 function HotDealsMixin:OnEvent(event, ...)
     if event == "ADDON_LOADED" then
-        local addonName = ...
-        if addonName == "HotDeals" then
+        local addonLoaded = ...
+        if addonLoaded == addonName then
             if Auctionator and Auctionator.API and Auctionator.API.v1 then
-                -- Hook into Auctionator database complete signals
-                Auctionator.API.v1.RegisterForDBUpdate("BetterSales", function()
+                Auctionator.API.v1.RegisterForDBUpdate(addonName, function()
                     self:TriggerUpdate()
                 end)
             else
                 print("|cffB0C4DE[BetterSales]|r Auctionator API not found!")
             end
         end
-    elseif self:IsVisible() then
+    elseif event == "BAG_UPDATE_DELAYED" and not self.manualClose then
         self:TriggerUpdate()
     end
 end
 
+function HotDealsMixin:OnClose()
+    self.manualClose = true
+    self:Hide()
+end
+
 function HotDealsMixin:GetAuctionatorCurrentPrice(itemLink)
-    return tonumber(Auctionator.API.v1.GetAuctionPriceByItemLink("BetterSales", itemLink) or 0)
+    return tonumber(Auctionator.API.v1.GetAuctionPriceByItemLink(addonName, itemLink) or 0)
 end
 
 -- Extracts and calculates the baseline average from the latest 15 historical scans
@@ -55,59 +69,75 @@ end
 
 function HotDealsMixin:UpdateList()
     local container = ContinuableContainer:Create()
-    local rawItems = {}
+
+    local uniqueBagItems = {}
 
     for bag = 0, NUM_TOTAL_EQUIPPED_BAG_SLOTS do
         for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local info = C_Container.GetContainerItemInfo(bag, slot)
             if info and info.itemID and info.hyperlink and not info.isBound then
-                table.insert(rawItems, info)
-                container:AddContinuable(Item:CreateFromItemID(info.itemID))
+                local link = info.hyperlink
+
+                if not uniqueBagItems[link] then
+                    uniqueBagItems[link] = {
+                        itemID = info.itemID,
+                        itemName = info.itemName,
+                        quality = info.quality,
+                        hyperlink = link,
+                        stackCount = 0,
+                        locations = {}
+                    }
+                    container:AddContinuable(Item:CreateFromItemID(info.itemID))
+                end
+
+                table.insert(uniqueBagItems[link].locations, { bag = bag, slot = slot })
+                uniqueBagItems[link].stackCount = uniqueBagItems[link].stackCount + info.stackCount
             end
         end
     end
 
     container:ContinueOnLoad(function()
-        self:ProcessBagData(rawItems)
-        self:RenderListElements()
+        self:ProcessBagData(uniqueBagItems)
+
+        if self.rendering then return end
+
+        self.rendering = true
+        C_Timer.After(0.1, function()
+            self.rendering = false
+            self:RenderListElements()
+        end)
     end)
 end
 
-function HotDealsMixin:ProcessBagData(rawItems)
+function HotDealsMixin:ProcessBagData(uniqueBagItems)
     self.bagData = {}
 
-    for _, info in ipairs(rawItems) do
+    for link, info in pairs(uniqueBagItems) do
         local id = info.itemID
-        local link = info.hyperlink
 
-        if not self.bagData[id] then
-            local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
-            local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
-            local currentPrice = self:GetAuctionatorCurrentPrice(link)
-            local averagePrice = self:GetAuctionatorInternalAverage(id, link)
-            local ratio = 0
+        local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
+        local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
+        local currentPrice = self:GetAuctionatorCurrentPrice(link)
+        local averagePrice = self:GetAuctionatorInternalAverage(id, link)
+        local ratio = 0
 
-            if averagePrice > 0 then
-                ratio = ((currentPrice - averagePrice) / averagePrice) * 100
-            end
-
-            self.bagData[id] = {
-                ID = id,
-                name = info.itemName,
-                locations = {},
-                isCraftingReagent = isCraftingReagent,
-                count = 0,
-                quality = info.quality,
-                craftingQualityInfo = craftingQualityInfo,
-                texture = itemTexture,
-                currentPrice = currentPrice,
-                averagePrice = averagePrice,
-                ratio = ratio
-            }
+        if averagePrice > 0 then
+            ratio = ((currentPrice - averagePrice) / averagePrice) * 100
         end
 
-        table.insert(self.bagData[id].locations, { bag = info.bag, slot = info.slot })
-        self.bagData[id].count = self.bagData[id].count + info.stackCount
+        self.bagData[link] = {
+            ID = id,
+            name = info.itemName,
+            locations = info.locations,
+            isCraftingReagent = isCraftingReagent,
+            count = info.stackCount,
+            quality = info.quality,
+            craftingQualityInfo = craftingQualityInfo,
+            texture = itemTexture,
+            currentPrice = currentPrice,
+            averagePrice = averagePrice,
+            ratio = ratio
+        }
     end
 end
 
@@ -126,8 +156,15 @@ function HotDealsMixin:RenderListElements()
         end
     end
 
+    if not next(displayList) then
+        self:Hide()
+        return
+    elseif not self.manualClose then
+        self:Show()
+    end
+
     table.sort(displayList, function(a, b)
-        if a.ratio ~= b.ratio then return a.ratio > b.ratio end`
+        if a.ratio ~= b.ratio then return a.ratio > b.ratio end
         if a.name ~= b.name then return a.name < b.name end
         return (a.quality or 0) > (b.quality or 0)
     end)
