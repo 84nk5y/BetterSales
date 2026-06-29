@@ -37,7 +37,6 @@
         <Scripts>
             <OnLoad method="OnLoad"/>
             <OnEvent method="OnEvent"/>
-            <OnShow method="UpdateList"/>
         </Scripts>
     </Frame>
 

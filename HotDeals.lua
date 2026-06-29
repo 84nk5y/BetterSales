@@ -1,11 +1,11 @@
-local addonName, _ = ...
+local ADDON_NAME, _ = ...
 
 HotDealsMixin = {}
 
 function HotDealsMixin:OnLoad()
     self.bagData = {}
     self.updatePending = false
-    self.rendering = false
+    self.renderingPending = false
     self.manualClose = false
 
     self:RegisterForDrag("LeftButton")
@@ -28,20 +28,30 @@ function HotDealsMixin:TriggerUpdate()
     self.updatePending = true
     C_Timer.After(0.1, function()
         self.updatePending = false
-        self:UpdateList()
+        self:UpdateItemList()
+    end)
+end
+
+function HotDealsMixin:TriggerRendering()
+    if self.renderingPending then return end
+
+    self.renderingPending = true
+    C_Timer.After(0.1, function()
+        self.renderingPending = false
+        self:RenderListElements()
     end)
 end
 
 function HotDealsMixin:OnEvent(event, ...)
     if event == "ADDON_LOADED" then
         local addonLoaded = ...
-        if addonLoaded == addonName then
+        if addonLoaded == ADDON_NAME then
             if Auctionator and Auctionator.API and Auctionator.API.v1 then
-                Auctionator.API.v1.RegisterForDBUpdate(addonName, function()
+                Auctionator.API.v1.RegisterForDBUpdate(ADDON_NAME, function()
                     self:TriggerUpdate()
                 end)
             else
-                print("|cffB0C4DE[BetterSales]|r Auctionator API not found!")
+                print("|cffB0C4DE["..ADDON_NAME.."]|r Auctionator API not found!")
             end
         end
     elseif event == "BAG_UPDATE_DELAYED" and not self.manualClose then
@@ -55,10 +65,9 @@ function HotDealsMixin:OnClose()
 end
 
 function HotDealsMixin:GetAuctionatorCurrentPrice(itemLink)
-    return tonumber(Auctionator.API.v1.GetAuctionPriceByItemLink(addonName, itemLink) or 0)
+    return tonumber(Auctionator.API.v1.GetAuctionPriceByItemLink(ADDON_NAME, itemLink) or 0)
 end
 
--- Extracts and calculates the baseline average from the latest 15 historical scans
 function HotDealsMixin:GetAuctionatorInternalAverage(itemID, itemLink)
     if not Auctionator or not Auctionator.Database then return 0 end
 
@@ -67,7 +76,7 @@ function HotDealsMixin:GetAuctionatorInternalAverage(itemID, itemLink)
     return Auctionator.Database:GetMeanPrice(itemKey, 15) or 0
 end
 
-function HotDealsMixin:UpdateList()
+function HotDealsMixin:UpdateItemList()
     local container = ContinuableContainer:Create()
 
     local uniqueBagItems = {}
@@ -98,14 +107,7 @@ function HotDealsMixin:UpdateList()
 
     container:ContinueOnLoad(function()
         self:ProcessBagData(uniqueBagItems)
-
-        if self.rendering then return end
-
-        self.rendering = true
-        C_Timer.After(0.1, function()
-            self.rendering = false
-            self:RenderListElements()
-        end)
+        self:TriggerRendering()
     end)
 end
 
@@ -125,8 +127,9 @@ function HotDealsMixin:ProcessBagData(uniqueBagItems)
             ratio = ((currentPrice - averagePrice) / averagePrice) * 100
         end
 
-        self.bagData[link] = {
+        self.bagData[id] = {
             ID = id,
+            link = link,
             name = info.itemName,
             locations = info.locations,
             isCraftingReagent = isCraftingReagent,
