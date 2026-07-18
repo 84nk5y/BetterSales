@@ -6,7 +6,6 @@ function HotDealsMixin:OnLoad()
     self.bagData = {}
     self.updatePending = false
     self.renderingPending = false
-    self.manualClose = false
 
     self:RegisterForDrag("LeftButton")
     self:SetScript("OnDragStart", self.StartMoving)
@@ -14,16 +13,10 @@ function HotDealsMixin:OnLoad()
 
     self:RegisterEvent("ADDON_LOADED")
     self:RegisterEvent("BAG_UPDATE_DELAYED")
-
-    if self.CloseButton then
-        self.CloseButton:HookScript("OnClick", function()
-            self:OnClose()
-        end)
-    end
 end
 
 function HotDealsMixin:TriggerUpdate()
-    if self.updatePending then return end
+    if self.updatePending or not self:IsVisible() then return end
 
     self.updatePending = true
     C_Timer.After(0.1, function()
@@ -33,7 +26,7 @@ function HotDealsMixin:TriggerUpdate()
 end
 
 function HotDealsMixin:TriggerRendering()
-    if self.renderingPending then return end
+    if self.renderingPending or not self:IsVisible() then return end
 
     self.renderingPending = true
     C_Timer.After(0.1, function()
@@ -54,14 +47,9 @@ function HotDealsMixin:OnEvent(event, ...)
                 print("|cffB0C4DE["..ADDON_NAME.."]|r Auctionator API not found!")
             end
         end
-    elseif event == "BAG_UPDATE_DELAYED" and not self.manualClose then
+    elseif event == "BAG_UPDATE_DELAYED" then
         self:TriggerUpdate()
     end
-end
-
-function HotDealsMixin:OnClose()
-    self.manualClose = true
-    self:Hide()
 end
 
 function HotDealsMixin:GetAuctionatorCurrentPrice(itemLink)
@@ -162,7 +150,7 @@ function HotDealsMixin:RenderListElements()
     if not next(displayList) then
         self:Hide()
         return
-    elseif not self.manualClose then
+    else
         self:Show()
     end
 
@@ -228,4 +216,11 @@ function HotDealsMixin:RenderListElements()
     container:Show()
 
     self.ScrollFrame:UpdateScrollChildRect()
+end
+
+
+SLASH_BetterBeals1 = "/bd"
+
+SlashCmdList["BetterBeals"] = function(arg)
+    HotDealsFrame:Show()
 end
