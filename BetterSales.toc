@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120105
 ## Title: BetterSales
 ## Category-enUS: Better UI
 ## IconTexture: 618858
