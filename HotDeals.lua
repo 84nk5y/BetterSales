@@ -1,5 +1,7 @@
 local ADDON_NAME, _ = ...
 
+local DEAL_RATIO_THRESHOLD = 50 -- minimum percent
+
 HotDealsMixin = {}
 
 function HotDealsMixin:OnLoad()
@@ -53,10 +55,14 @@ function HotDealsMixin:OnEvent(event, ...)
 end
 
 function HotDealsMixin:GetAuctionatorCurrentPrice(itemLink)
-    return tonumber(Auctionator.API.v1.GetAuctionPriceByItemLink(ADDON_NAME, itemLink) or 0)
+    if not Auctionator or not Auctionator.Database then return 0 end
+
+    local itemKey = Auctionator.Utilities.BasicDBKeyFromLink(itemLink)
+
+    return Auctionator.Database:GetPrice(itemKey) or 0
 end
 
-function HotDealsMixin:GetAuctionatorInternalAverage(itemID, itemLink)
+function HotDealsMixin:GetAuctionatorAverage(itemLink)
     if not Auctionator or not Auctionator.Database then return 0 end
 
     local itemKey = Auctionator.Utilities.BasicDBKeyFromLink(itemLink)
@@ -104,11 +110,10 @@ function HotDealsMixin:ProcessBagData(uniqueBagItems)
 
     for link, info in pairs(uniqueBagItems) do
         local id = info.itemID
-
         local _, _, _, _, _, _, _, _, _, itemTexture, _, _, _, _, _, _, isCraftingReagent = C_Item.GetItemInfo(link)
         local craftingQualityInfo = isCraftingReagent and C_TradeSkillUI.GetItemReagentQualityInfo(id) or nil
         local currentPrice = self:GetAuctionatorCurrentPrice(link)
-        local averagePrice = self:GetAuctionatorInternalAverage(id, link)
+        local averagePrice = self:GetAuctionatorAverage(link)
         local ratio = 0
 
         if averagePrice > 0 then
@@ -142,7 +147,7 @@ function HotDealsMixin:RenderListElements()
 
     local displayList = {}
     for _, item in pairs(self.bagData) do
-        if item and item.ratio > 20 then
+        if item and item.ratio > DEAL_RATIO_THRESHOLD then
             table.insert(displayList, item)
         end
     end
@@ -204,7 +209,9 @@ function HotDealsMixin:RenderListElements()
 
         entry:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
-            GameTooltip:AddLine(GetMoneyString(self.item.currentPrice, true) .. "  vs  " .. GetMoneyString(self.item.averagePrice, true), 1, 1, 1)
+            GameTooltip:AddLine("Price comparison")
+            GameTooltip:AddDoubleLine("Current price: ", GetMoneyString(self.item.currentPrice, true), 1, 1, 1, 1, 1, 1)
+            GameTooltip:AddDoubleLine("Average price: ", GetMoneyString(self.item.averagePrice, true), 1, 1, 1, 1, 1, 1)
             GameTooltip:Show()
         end)
 
